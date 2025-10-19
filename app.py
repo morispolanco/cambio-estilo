@@ -49,7 +49,10 @@ def split_into_chapters(text: str) -> List[str]:
     ]
     combined_pattern = '|'.join(f'({pattern})' for pattern in chapter_patterns)
     chapters = re.split(combined_pattern, text, flags=re.MULTILINE)
-    chapters = [chapter.strip() for chapter in chapters if chapter.strip()]
+    
+    # --- LÍNEA CORREGIDA ---
+    # Filtra None y cadenas vacías ANTES de aplicar .strip()
+    chapters = [chapter.strip() for chapter in chapters if chapter]
     
     if len(chapters) <= 1:
         words = text.split()
