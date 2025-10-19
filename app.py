@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 import re
-import google.generativeai as genai
+from google import genai  # <-- NUEVA IMPORTACIÓN
 from PyPDF2 import PdfReader
 import base64
 from typing import List
@@ -14,19 +14,27 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- Funciones de la API de Gemini ---
+# --- Funciones de la API de Gemini (Actualizadas) ---
 
 def configure_gemini(api_key: str):
-    """Configura la API de Google Gemini con la clave proporcionada."""
+    """
+    Configura el cliente de la API de Google Gemini usando la nueva biblioteca.
+    Establece la variable de entorno para que el cliente la use.
+    """
+    if not api_key:
+        st.error("La API Key no puede estar vacía.")
+        return None
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
-        return model
+        # Establecer la variable de entorno para que el cliente la detecte
+        os.environ["GEMINI_API_KEY"] = api_key
+        # Inicializar el cliente unificado
+        client = genai.Client()
+        return client
     except Exception as e:
-        st.error(f"Error al configurar la API de Gemini: {str(e)}")
+        st.error(f"Error al configurar el cliente de Gemini: {str(e)}")
         return None
 
-# --- Funciones de Procesamiento de Texto y Documentos ---
+# --- Funciones de Procesamiento de Texto y Documentos (Sin cambios) ---
 
 def extract_text_from_pdf(uploaded_file) -> str:
     """Extrae el texto de un archivo PDF subido."""
@@ -50,7 +58,6 @@ def split_into_chapters(text: str) -> List[str]:
     combined_pattern = '|'.join(f'({pattern})' for pattern in chapter_patterns)
     chapters = re.split(combined_pattern, text, flags=re.MULTILINE)
     
-    # --- LÍNEA CORREGIDA ---
     # Filtra None y cadenas vacías ANTES de aplicar .strip()
     chapters = [chapter.strip() for chapter in chapters if chapter]
     
@@ -70,7 +77,9 @@ def split_into_chapters(text: str) -> List[str]:
             chapters.append(' '.join(current_chapter))
     return chapters
 
-def change_style_based_on_description(model, text: str, style_description: str, apply_rules: bool) -> str:
+# --- Funciones de Edición con IA (Actualizadas para usar el nuevo cliente) ---
+
+def change_style_based_on_description(client: genai.Client, text: str, style_description: str, apply_rules: bool) -> str:
     """Utiliza Gemini para cambiar el tono y estilo basándose en una descripción del usuario."""
     rules_text = """
     Además, aplica estrictamente las siguientes reglas de ortografía del español:
@@ -94,13 +103,17 @@ def change_style_based_on_description(model, text: str, style_description: str, 
     Texto reescrito:
     """
     try:
-        response = model.generate_content(prompt)
+        # NUEVA SINTAXIS DE LLAMADA A LA API
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",  # Puedes cambiar a "gemini-1.5-pro" si lo prefieres
+            contents=prompt
+        )
         return response.text
     except Exception as e:
         st.error(f"Error al cambiar el estilo: {str(e)}")
         return text
 
-def correct_style(model, text: str, apply_rules: bool) -> str:
+def correct_style(client: genai.Client, text: str, apply_rules: bool) -> str:
     """Utiliza Gemini para realizar correcciones de estilo a un texto."""
     rules_text = """
     Presta especial atención a las siguientes reglas de ortografía del español:
@@ -121,13 +134,17 @@ def correct_style(model, text: str, apply_rules: bool) -> str:
     Texto corregido:
     """
     try:
-        response = model.generate_content(prompt)
+        # NUEVA SINTAXIS DE LLAMADA A LA API
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
         return response.text
     except Exception as e:
         st.error(f"Error al realizar correcciones de estilo: {str(e)}")
         return text
 
-def apply_spanish_orthography_rules(model, text: str) -> str:
+def apply_spanish_orthography_rules(client: genai.Client, text: str) -> str:
     """Aplica reglas ortográficas específicas del español de forma explícita."""
     prompt = f"""
     Revisa y corrige el siguiente texto para que cumpla estrictamente con estas reglas de ortografía del español:
@@ -144,13 +161,17 @@ def apply_spanish_orthography_rules(model, text: str) -> str:
     Texto corregido:
     """
     try:
-        response = model.generate_content(prompt)
+        # NUEVA SINTAXIS DE LLAMADA A LA API
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
         return response.text
     except Exception as e:
         st.error(f"Error al aplicar las reglas ortográficas: {str(e)}")
         return text
 
-# --- Funciones de Utilidad ---
+# --- Funciones de Utilidad (Sin cambios) ---
 
 def create_download_file(text: str, filename: str) -> str:
     """Crea un enlace de descarga para el texto procesado."""
@@ -158,17 +179,15 @@ def create_download_file(text: str, filename: str) -> str:
     href = f'<a href="data:file/txt;base64,{b64}" download="{filename}">Descargar archivo editado</a>'
     return href
 
-# --- Interfaz Principal de la Aplicación ---
+# --- Interfaz Principal de la Aplicación (Actualizada para usar el cliente) ---
 
 def main():
     st.title("📝 Editor de Documentos con IA")
-    st.markdown("Esta aplicación utiliza Google Gemini para editar documentos. Describe el estilo y tono que deseas y la IA lo aplicará a tu texto.")
+    st.markdown("Esta aplicación utiliza la API de Google Gemini para editar documentos. Describe el estilo y tono que deseas y la IA lo aplicará a tu texto.")
     
-    # Sidebar para configuración
     st.sidebar.header("Configuración")
     api_key = st.sidebar.text_input("Introduce tu API Key de Google Gemini:", type="password")
     
-    # Área de texto para la descripción del estilo
     st.sidebar.subheader("Descripción del Estilo y Tono")
     style_description = st.sidebar.text_area(
         "Describe cómo quieres que sea el nuevo documento:",
@@ -176,23 +195,18 @@ def main():
         height=150
     )
 
-    # Panel con ejemplos
     with st.sidebar.expander("💡 Ver ejemplos de descripciones"):
         st.markdown("""
         **Académico formal:**
-        > "Escribe en un registro formal y académico. Utiliza un vocabulario preciso y una estructura argumentativa clara. Mantén un tono objetivo y analítico, citando fuentes implícitamente si es necesario."
+        > "Escribe en un registro formal y académico. Utiliza un vocabulario preciso y una estructura argumentativa clara. Mantén un tono objetivo y analítico."
         
         **Marketing persuasivo:**
-        > "Adopta un tono enérgico y persuasivo. Usa un lenguaje directo y orientado a la acción, destacando los beneficios. Crea un sentido de urgencia y conecta emocionalmente con el lector."
+        > "Adopta un tono enérgico y persuasivo. Usa un lenguaje directo y orientado a la acción, destacando los beneficios."
         
         **Blog amigable:**
-        > "El estilo debe ser conversacional y amigable, como hablar con un amigo. Usa un lenguaje sencillo, preguntas retóricas y un toque de humor. Organiza el texto con listas y párrafos cortos para facilitar la lectura."
-        
-        **Narrativo y evocador:**
-        > "Escribe con un estilo narrativo que dibuje imágenes en la mente del lector. Usa metáforas, descripciones sensoriales y un ritmo pausado. El tono debe ser reflexivo y melancólico."
+        > "El estilo debe ser conversacional y amigable. Usa un lenguaje sencillo, preguntas retóricas y un toque de humor."
         """)
     
-    # Opciones de procesamiento
     st.sidebar.markdown("---")
     st.sidebar.subheader("Opciones de Procesamiento")
     process_chapters = st.sidebar.checkbox("Procesar capítulo por capítulo", value=True)
@@ -203,7 +217,6 @@ def main():
         help="Aplica reglas específicas de capitalización y puntuación en español."
     )
     
-    # Área principal para subir y procesar documentos
     st.header("Sube tu documento")
     uploaded_file = st.file_uploader(
         "Sube un archivo PDF, TXT o Markdown (MD):", 
@@ -243,24 +256,25 @@ def main():
                     st.warning("Por favor, describe el estilo y tono que deseas aplicar.")
                 else:
                     with st.spinner("Procesando documento..."):
-                        model = configure_gemini(api_key)
-                        if model:
+                        # CAMBIO: Se obtiene el cliente, no el modelo
+                        client = configure_gemini(api_key)
+                        if client:
                             processed_chapters = []
                             progress_bar = st.progress(0)
                             
                             for i, chapter in enumerate(chapters):
                                 # 1. Cambiar estilo basado en la descripción del usuario
                                 edited_chapter = change_style_based_on_description(
-                                    model, chapter, style_description, apply_spanish_rules
+                                    client, chapter, style_description, apply_spanish_rules
                                 )
                                 
                                 # 2. Aplicar correcciones de estilo generales
                                 if apply_corrections:
-                                    edited_chapter = correct_style(model, edited_chapter, apply_spanish_rules)
+                                    edited_chapter = correct_style(client, edited_chapter, apply_spanish_rules)
                                 
                                 # 3. Aplicar reglas ortográficas del español (revisión final)
                                 if apply_spanish_rules:
-                                    edited_chapter = apply_spanish_orthography_rules(model, edited_chapter)
+                                    edited_chapter = apply_spanish_orthography_rules(client, edited_chapter)
                                 
                                 processed_chapters.append(edited_chapter)
                                 progress = (i + 1) / len(chapters)
