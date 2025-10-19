@@ -163,7 +163,7 @@ def apply_spanish_orthography_rules(client: genai.Client, text: str) -> str:
     try:
         # NUEVA SINTAXIS DE LLAMADA A LA API
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             contents=prompt
         )
         return response.text
