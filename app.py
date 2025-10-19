@@ -1,7 +1,8 @@
 import streamlit as st
 import os
 import re
-from google import genai  # <-- NUEVA IMPORTACIÓN
+from google import genai
+from google.genai import types  # <-- NUEVA IMPORTACIÓN
 from PyPDF2 import PdfReader
 import base64
 from typing import List
@@ -17,17 +18,12 @@ st.set_page_config(
 # --- Funciones de la API de Gemini (Actualizadas) ---
 
 def configure_gemini(api_key: str):
-    """
-    Configura el cliente de la API de Google Gemini usando la nueva biblioteca.
-    Establece la variable de entorno para que el cliente la use.
-    """
+    """Configura el cliente de la API de Google Gemini."""
     if not api_key:
         st.error("La API Key no puede estar vacía.")
         return None
     try:
-        # Establecer la variable de entorno para que el cliente la detecte
         os.environ["GEMINI_API_KEY"] = api_key
-        # Inicializar el cliente unificado
         client = genai.Client()
         return client
     except Exception as e:
@@ -57,8 +53,6 @@ def split_into_chapters(text: str) -> List[str]:
     ]
     combined_pattern = '|'.join(f'({pattern})' for pattern in chapter_patterns)
     chapters = re.split(combined_pattern, text, flags=re.MULTILINE)
-    
-    # Filtra None y cadenas vacías ANTES de aplicar .strip()
     chapters = [chapter.strip() for chapter in chapters if chapter]
     
     if len(chapters) <= 1:
@@ -77,10 +71,10 @@ def split_into_chapters(text: str) -> List[str]:
             chapters.append(' '.join(current_chapter))
     return chapters
 
-# --- Funciones de Edición con IA (Actualizadas para usar el nuevo cliente) ---
+# --- Funciones de Edición con IA (Totalmente Reescritas) ---
 
-def change_style_based_on_description(client: genai.Client, text: str, style_description: str, apply_rules: bool) -> str:
-    """Utiliza Gemini para cambiar el tono y estilo basándose en una descripción del usuario."""
+def change_style_based_on_description(client: genai.Client, text: str, style_description: str, apply_rules: bool, enable_search: bool) -> str:
+    """Utiliza Gemini con capacidades avanzadas para cambiar el estilo."""
     rules_text = """
     Además, aplica estrictamente las siguientes reglas de ortografía del español:
     1. En títulos, subtítulos y encabezados, usa mayúscula inicial solamente en la primera palabra y en los nombres propios.
@@ -102,19 +96,33 @@ def change_style_based_on_description(client: genai.Client, text: str, style_des
     
     Texto reescrito:
     """
+    
+    # --- Estructura moderna del contenido y la configuración ---
+    contents = [types.Content(role="user", parts=[types.Part.from_text(prompt)])]
+    
+    tools = [types.Tool(googleSearch=types.GoogleSearch())] if enable_search else None
+    
+    config = types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(thinking_budget=-1),
+        tools=tools,
+    )
+    
     try:
-        # NUEVA SINTAXIS DE LLAMADA A LA API
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",  # Puedes cambiar a "gemini-1.5-pro" si lo prefieres
-            contents=prompt
-        )
-        return response.text
+        response_text = ""
+        # Uso de generate_content_stream
+        for chunk in client.models.generate_content_stream(
+            model="gemini-flash-latest",  # <-- MODELO ACTUALIZADO
+            contents=contents,
+            config=config,
+        ):
+            response_text += chunk.text
+        return response_text
     except Exception as e:
         st.error(f"Error al cambiar el estilo: {str(e)}")
         return text
 
-def correct_style(client: genai.Client, text: str, apply_rules: bool) -> str:
-    """Utiliza Gemini para realizar correcciones de estilo a un texto."""
+def correct_style(client: genai.Client, text: str, apply_rules: bool, enable_search: bool) -> str:
+    """Utiliza Gemini para realizar correcciones de estilo."""
     rules_text = """
     Presta especial atención a las siguientes reglas de ortografía del español:
     1. En títulos, subtítulos y encabezados, usa mayúscula inicial solamente en la primera palabra y en los nombres propios.
@@ -133,19 +141,29 @@ def correct_style(client: genai.Client, text: str, apply_rules: bool) -> str:
     
     Texto corregido:
     """
+    
+    contents = [types.Content(role="user", parts=[types.Part.from_text(prompt)])]
+    tools = [types.Tool(googleSearch=types.GoogleSearch())] if enable_search else None
+    config = types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(thinking_budget=-1),
+        tools=tools,
+    )
+    
     try:
-        # NUEVA SINTAXIS DE LLAMADA A LA API
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=prompt
-        )
-        return response.text
+        response_text = ""
+        for chunk in client.models.generate_content_stream(
+            model="gemini-flash-latest",
+            contents=contents,
+            config=config,
+        ):
+            response_text += chunk.text
+        return response_text
     except Exception as e:
         st.error(f"Error al realizar correcciones de estilo: {str(e)}")
         return text
 
 def apply_spanish_orthography_rules(client: genai.Client, text: str) -> str:
-    """Aplica reglas ortográficas específicas del español de forma explícita."""
+    """Aplica reglas ortográficas específicas del español."""
     prompt = f"""
     Revisa y corrige el siguiente texto para que cumpla estrictamente con estas reglas de ortografía del español:
     
@@ -160,13 +178,21 @@ def apply_spanish_orthography_rules(client: genai.Client, text: str) -> str:
     
     Texto corregido:
     """
+    
+    contents = [types.Content(role="user", parts=[types.Part.from_text(prompt)])]
+    config = types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(thinking_budget=-1),
+    )
+    
     try:
-        # NUEVA SINTAXIS DE LLAMADA A LA API
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        return response.text
+        response_text = ""
+        for chunk in client.models.generate_content_stream(
+            model="gemini-flash-latest",
+            contents=contents,
+            config=config,
+        ):
+            response_text += chunk.text
+        return response_text
     except Exception as e:
         st.error(f"Error al aplicar las reglas ortográficas: {str(e)}")
         return text
@@ -179,11 +205,11 @@ def create_download_file(text: str, filename: str) -> str:
     href = f'<a href="data:file/txt;base64,{b64}" download="{filename}">Descargar archivo editado</a>'
     return href
 
-# --- Interfaz Principal de la Aplicación (Actualizada para usar el cliente) ---
+# --- Interfaz Principal de la Aplicación (Actualizada) ---
 
 def main():
     st.title("📝 Editor de Documentos con IA")
-    st.markdown("Esta aplicación utiliza la API de Google Gemini para editar documentos. Describe el estilo y tono que deseas y la IA lo aplicará a tu texto.")
+    st.markdown("Esta aplicación utiliza la API de Google Gemini con capacidades avanzadas para editar y enriquecer tus documentos.")
     
     st.sidebar.header("Configuración")
     api_key = st.sidebar.text_input("Introduce tu API Key de Google Gemini:", type="password")
@@ -215,6 +241,12 @@ def main():
         "Aplicar reglas ortográficas del español", 
         value=True,
         help="Aplica reglas específicas de capitalización y puntuación en español."
+    )
+    # <-- NUEVA OPCIÓN
+    enable_google_search = st.sidebar.checkbox(
+        "Habilitar Búsqueda de Google", 
+        value=False,
+        help="Permite que la IA busque información en tiempo real para mejorar o contextualizar el texto. Puede ralentizar el proceso."
     )
     
     st.header("Sube tu documento")
@@ -256,7 +288,6 @@ def main():
                     st.warning("Por favor, describe el estilo y tono que deseas aplicar.")
                 else:
                     with st.spinner("Procesando documento..."):
-                        # CAMBIO: Se obtiene el cliente, no el modelo
                         client = configure_gemini(api_key)
                         if client:
                             processed_chapters = []
@@ -265,12 +296,12 @@ def main():
                             for i, chapter in enumerate(chapters):
                                 # 1. Cambiar estilo basado en la descripción del usuario
                                 edited_chapter = change_style_based_on_description(
-                                    client, chapter, style_description, apply_spanish_rules
+                                    client, chapter, style_description, apply_spanish_rules, enable_google_search
                                 )
                                 
                                 # 2. Aplicar correcciones de estilo generales
                                 if apply_corrections:
-                                    edited_chapter = correct_style(client, edited_chapter, apply_spanish_rules)
+                                    edited_chapter = correct_style(client, edited_chapter, apply_spanish_rules, enable_google_search)
                                 
                                 # 3. Aplicar reglas ortográficas del español (revisión final)
                                 if apply_spanish_rules:
@@ -301,8 +332,8 @@ def main():
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Acerca de esta aplicación")
 st.sidebar.info(
-    "Esta aplicación utiliza la API de Google Gemini para editar documentos. "
-    "Describe el estilo y tono que deseas, y la IA se encargará de aplicarlo a tu texto."
+    "Esta aplicación utiliza la API de Google Gemini con capacidades avanzadas como Búsqueda de Google y Modo de Pensamiento "
+    "para editar y enriquecer tus documentos."
 )
 
 st.sidebar.markdown("### Instrucciones de uso")
@@ -310,7 +341,7 @@ st.sidebar.markdown(
     """
     1. Introduce tu API Key de Google Gemini.
     2. Describe con detalle el estilo y tono que quieres.
-    3. Selecciona las opciones de corrección.
+    3. Selecciona las opciones de corrección y mejoras.
     4. Sube tu documento (PDF, TXT o MD).
     5. Haz clic en "Procesar documento".
     6. Revisa el resultado y descarga el archivo editado.
