@@ -97,7 +97,7 @@ def change_style_based_on_description(client: genai.Client, text: str, style_des
     Texto reescrito:
     """
     
-    contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])] # <-- LÍNEA CORREGIDA
+    contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
     
     tools = [types.Tool(googleSearch=types.GoogleSearch())] if enable_search else None
     
@@ -113,7 +113,9 @@ def change_style_based_on_description(client: genai.Client, text: str, style_des
             contents=contents,
             config=config,
         ):
-            response_text += chunk.text
+            # --- LÍNEA CORREGIDA ---
+            if chunk.text is not None:
+                response_text += chunk.text
         return response_text
     except Exception as e:
         st.error(f"Error al cambiar el estilo: {str(e)}")
@@ -140,7 +142,7 @@ def correct_style(client: genai.Client, text: str, apply_rules: bool, enable_sea
     Texto corregido:
     """
     
-    contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])] # <-- LÍNEA CORREGIDA
+    contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
     
     tools = [types.Tool(googleSearch=types.GoogleSearch())] if enable_search else None
     config = types.GenerateContentConfig(
@@ -155,7 +157,9 @@ def correct_style(client: genai.Client, text: str, apply_rules: bool, enable_sea
             contents=contents,
             config=config,
         ):
-            response_text += chunk.text
+            # --- LÍNEA CORREGIDA ---
+            if chunk.text is not None:
+                response_text += chunk.text
         return response_text
     except Exception as e:
         st.error(f"Error al realizar correcciones de estilo: {str(e)}")
@@ -178,7 +182,7 @@ def apply_spanish_orthography_rules(client: genai.Client, text: str) -> str:
     Texto corregido:
     """
     
-    contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])] # <-- LÍNEA CORREGIDA
+    contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
     
     config = types.GenerateContentConfig(
         thinking_config=types.ThinkingConfig(thinking_budget=-1),
@@ -191,7 +195,9 @@ def apply_spanish_orthography_rules(client: genai.Client, text: str) -> str:
             contents=contents,
             config=config,
         ):
-            response_text += chunk.text
+            # --- LÍNEA CORREGIDA ---
+            if chunk.text is not None:
+                response_text += chunk.text
         return response_text
     except Exception as e:
         st.error(f"Error al aplicar las reglas ortográficas: {str(e)}")
