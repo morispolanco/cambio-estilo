@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import re
 from google import genai
-from google.genai import types  # <-- NUEVA IMPORTACIÓN
+from google.genai import types
 from PyPDF2 import PdfReader
 import base64
 from typing import List
@@ -15,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- Funciones de la API de Gemini (Actualizadas) ---
+# --- Funciones de la API de Gemini ---
 
 def configure_gemini(api_key: str):
     """Configura el cliente de la API de Google Gemini."""
@@ -30,7 +30,7 @@ def configure_gemini(api_key: str):
         st.error(f"Error al configurar el cliente de Gemini: {str(e)}")
         return None
 
-# --- Funciones de Procesamiento de Texto y Documentos (Sin cambios) ---
+# --- Funciones de Procesamiento de Texto y Documentos ---
 
 def extract_text_from_pdf(uploaded_file) -> str:
     """Extrae el texto de un archivo PDF subido."""
@@ -71,7 +71,7 @@ def split_into_chapters(text: str) -> List[str]:
             chapters.append(' '.join(current_chapter))
     return chapters
 
-# --- Funciones de Edición con IA (Totalmente Reescritas) ---
+# --- Funciones de Edición con IA (CORREGIDAS) ---
 
 def change_style_based_on_description(client: genai.Client, text: str, style_description: str, apply_rules: bool, enable_search: bool) -> str:
     """Utiliza Gemini con capacidades avanzadas para cambiar el estilo."""
@@ -97,8 +97,7 @@ def change_style_based_on_description(client: genai.Client, text: str, style_des
     Texto reescrito:
     """
     
-    # --- Estructura moderna del contenido y la configuración ---
-    contents = [types.Content(role="user", parts=[types.Part.from_text(prompt)])]
+    contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])] # <-- LÍNEA CORREGIDA
     
     tools = [types.Tool(googleSearch=types.GoogleSearch())] if enable_search else None
     
@@ -109,9 +108,8 @@ def change_style_based_on_description(client: genai.Client, text: str, style_des
     
     try:
         response_text = ""
-        # Uso de generate_content_stream
         for chunk in client.models.generate_content_stream(
-            model="gemini-flash-latest",  # <-- MODELO ACTUALIZADO
+            model="gemini-flash-latest",
             contents=contents,
             config=config,
         ):
@@ -142,7 +140,8 @@ def correct_style(client: genai.Client, text: str, apply_rules: bool, enable_sea
     Texto corregido:
     """
     
-    contents = [types.Content(role="user", parts=[types.Part.from_text(prompt)])]
+    contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])] # <-- LÍNEA CORREGIDA
+    
     tools = [types.Tool(googleSearch=types.GoogleSearch())] if enable_search else None
     config = types.GenerateContentConfig(
         thinking_config=types.ThinkingConfig(thinking_budget=-1),
@@ -179,7 +178,8 @@ def apply_spanish_orthography_rules(client: genai.Client, text: str) -> str:
     Texto corregido:
     """
     
-    contents = [types.Content(role="user", parts=[types.Part.from_text(prompt)])]
+    contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])] # <-- LÍNEA CORREGIDA
+    
     config = types.GenerateContentConfig(
         thinking_config=types.ThinkingConfig(thinking_budget=-1),
     )
@@ -197,7 +197,7 @@ def apply_spanish_orthography_rules(client: genai.Client, text: str) -> str:
         st.error(f"Error al aplicar las reglas ortográficas: {str(e)}")
         return text
 
-# --- Funciones de Utilidad (Sin cambios) ---
+# --- Funciones de Utilidad ---
 
 def create_download_file(text: str, filename: str) -> str:
     """Crea un enlace de descarga para el texto procesado."""
@@ -205,7 +205,7 @@ def create_download_file(text: str, filename: str) -> str:
     href = f'<a href="data:file/txt;base64,{b64}" download="{filename}">Descargar archivo editado</a>'
     return href
 
-# --- Interfaz Principal de la Aplicación (Actualizada) ---
+# --- Interfaz Principal de la Aplicación ---
 
 def main():
     st.title("📝 Editor de Documentos con IA")
@@ -242,7 +242,6 @@ def main():
         value=True,
         help="Aplica reglas específicas de capitalización y puntuación en español."
     )
-    # <-- NUEVA OPCIÓN
     enable_google_search = st.sidebar.checkbox(
         "Habilitar Búsqueda de Google", 
         value=False,
@@ -294,16 +293,13 @@ def main():
                             progress_bar = st.progress(0)
                             
                             for i, chapter in enumerate(chapters):
-                                # 1. Cambiar estilo basado en la descripción del usuario
                                 edited_chapter = change_style_based_on_description(
                                     client, chapter, style_description, apply_spanish_rules, enable_google_search
                                 )
                                 
-                                # 2. Aplicar correcciones de estilo generales
                                 if apply_corrections:
                                     edited_chapter = correct_style(client, edited_chapter, apply_spanish_rules, enable_google_search)
                                 
-                                # 3. Aplicar reglas ortográficas del español (revisión final)
                                 if apply_spanish_rules:
                                     edited_chapter = apply_spanish_orthography_rules(client, edited_chapter)
                                 
